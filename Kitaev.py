@@ -4,7 +4,7 @@ from scipy.linalg import eig
 from itertools import permutations, combinations
 import numpy.linalg as la
 
-# Helper function for Kronecker product folding
+# Helper function for Kronecker product
 def fold_kronecker(matrices):
     result = matrices[0]
     for m in matrices[1:]:
@@ -16,7 +16,7 @@ def comb(n, k):
     from math import factorial
     return factorial(n) // (factorial(k) * factorial(n - k))
 
-# Initialize parameters
+# Initialize lattice parameters and couplings
 Latticedimensions = [2, 2]  # 2x2 lattice
 partition = [[1, 2], [3, 4], [5, 6]]  # Lattice partition
 outside = [7, 8]  # Outside sites
@@ -31,14 +31,14 @@ for k in range(1, len(partition) + 1):
     Signum1.append(np.full(comb(len(partition), k), (-1)**(k + 1)))
 Signum2 = np.concatenate(Signum1)
 
-# Define particles (chains)
+# Define chains and set used to determine sign on v.n entropy
 for i in range(Latticedimensions[1]):
     particles.append(2 * Latticedimensions[0])
 L1 = len(particles)
 L2 = sum(particles)
 L3 = sum(particles[:-1])
 
-# Magnetic field
+# Define Pauli matricies and define magnetic field strength/direction
 vec1 = (h / np.sqrt(3)) * np.array([1, 1, 1])
 sigma_x = np.array([[0, 1], [1, 0]])
 sigma_y = np.array([[0, -1j], [1j, 0]])
@@ -47,7 +47,7 @@ identity = np.eye(2)
 sigma = [sigma_x, sigma_y, sigma_z]
 U = vec1[0]*sigma[0] + vec1[1]*sigma[1] + vec1[2]*sigma[2]
 
-# Define g function for bond types
+# Define g function which finds bond type in Kitaev chain
 def g(x, k):
     if x == 2 and k % 2 == 1:
         return sigma_x
@@ -57,7 +57,7 @@ def g(x, k):
         return identity
     return identity
 
-# Function to build chain Kronecker products
+# Function to build chain Kronecker product list for one chain
 def chain(n):
     Permutation1 = list(permutations([2] + [1] * (n - 2) + [2]))
     Info = []
@@ -73,10 +73,10 @@ def chain(n):
     result = [[g(Permutation1[y][l], y + 1) for l in range(n)] for y in range(len(Permutation1))]
     return result
 
-# Helper for site indexing
+# Helper for site indexing. Finds site number before and after site j
 Helper = [[sum(particles[:j-1]), sum(particles[j:])] for j in range(1, L1 + 1)]
 
-# Build chains and lattice
+# Build chains and lists the kronecker products for each chain with appropriate length. Also joins the chains together
 Chains = [chain(p) for p in particles]
 Lattice1 = []
 for i in range(L1):
@@ -126,12 +126,12 @@ for i in range(len(TBC1)):
 # Combine Kronecker products
 KroneckerProducts1 = Lattice2 + Zbonds4 + TBC2
 
-# Construct Hamiltonian H1
+# Construct Hamiltonian H1 for the lattice
 H1 = sparse.csr_matrix((2**L2, 2**L2), dtype=complex)
 for kp in KroneckerProducts1:
     H1 += (J / 2) * sparse.csr_matrix(fold_kronecker(kp))
 
-# Construct Hamiltonian H2 (magnetic field)
+# Construct Hamiltonian H2 for the magnetic field interaction
 KroneckerProducts2 = []
 for i in range(L2):
     config = [identity] * L2
@@ -144,27 +144,27 @@ for kp in KroneckerProducts2:
 # Total Hamiltonian
 H = (H1 + H2).toarray()
 
-# Compute ground state
+# Compute ground state numerically
 eigenvalues, eigenvectors = eig(-H)
 lambda1 = -np.max(np.real(eigenvalues))
 groundstate = eigenvectors[:, np.argmax(np.real(eigenvalues))]
 
-# Hamiltonian basis in binary
+# Puts kronecker product basis in binary
 HamiltonianBasis = [np.binary_repr(j, width=L2) for j in range(2**L2)]
 HamiltonianBasis = [[int(d) for d in x] for x in HamiltonianBasis]
 
-# Compute subsets and regions
+# Compute all viable subsets of the partition
 subsets = list(combinations(partition, r) for r in range(1, len(partition) + 1))
 subsets = [item for sublist in subsets for item in sublist]
 regions = [np.concatenate(s) for s in subsets]
 
-# Region bases
+# Lists all regions in lattice for the selected partition
 regionbases1 = []
 for r in regions:
     basis = [np.binary_repr(j, width=len(r)) for j in range(2**len(r))]
     regionbases1.append([[int(d) for d in x] for x in basis])
 
-# Projected spaces
+# Lists indices of hamiltonian basis vectors needed for each region
 projectedspaces = []
 for k in range(len(regionbases1)):
     region_k = regions[k]
@@ -179,7 +179,7 @@ for k in range(len(regionbases1)):
         space_k.append(indices)
     projectedspaces.append(space_k)
 
-# Projections
+# Decomposes ground state into direct product of subspaces
 projections = []
 for i in range(len(projectedspaces)):
     proj_i = []
@@ -188,7 +188,7 @@ for i in range(len(projectedspaces)):
         proj_i.append(proj_ij)
     projections.append(proj_i)
 
-# Bilinear form
+# Forms matrix representation of inner product bilinear form on each decomposition
 BilinearForm = []
 for i in range(len(projections)):
     form_i = []
